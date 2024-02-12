@@ -90,10 +90,16 @@ fun CalendarView(onClickBack: () -> Unit) {
     val firstOfMonth = remember(selectedMonth) { selectedMonth.atDay(1) }
     val lastOfMonth = remember(selectedMonth) { selectedMonth.atEndOfMonth() }
     val startDayOfWeek = firstOfMonth.dayOfWeek.value
-    val days = remember(daysInMonth, startDayOfWeek) {
-        List(daysInMonth + startDayOfWeek - 1) { dayIndex ->
-            if (dayIndex >= startDayOfWeek - 1) LocalDate.of(selectedMonth.year, selectedMonth.month, dayIndex - startDayOfWeek + 2) else null
+    val days = remember(selectedMonth) {
+        val totalDays = List(daysInMonth + startDayOfWeek - 1) { dayIndex ->
+            if (dayIndex >= startDayOfWeek) {
+                LocalDate.of(selectedMonth.year, selectedMonth.month, dayIndex - startDayOfWeek + 1)
+            } else null
         }
+        // Fill in the leading and trailing nulls to complete the week
+        val additionalDaysAtStart = startDayOfWeek - 1
+        val additionalDaysAtEnd = 7 - (totalDays.size % 7)
+        List(additionalDaysAtStart) { null } + totalDays + List(additionalDaysAtEnd) { null }
     }
 
     Column(modifier = Modifier
@@ -115,16 +121,13 @@ fun CalendarView(onClickBack: () -> Unit) {
             }
         }
 
-
-
-        Row(modifier = Modifier.fillMaxSize().wrapContentSize(Alignment.Center)) {
-            MonthYearHeader(selectedMonth) {
-                selectedMonth = it
-            }
-            DaysOfWeekHeader()
-            Spacer(modifier = Modifier.height(8.dp))
-            CalendarDaysGrid(days)
+        MonthYearHeader(selectedMonth) {
+            selectedMonth = it
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        DaysOfWeekHeader()
+        Spacer(modifier = Modifier.height(8.dp))
+        CalendarDaysGrid(days)
     }
 }
 
@@ -145,7 +148,7 @@ fun MonthYearHeader(selectedMonth: YearMonth, onMonthChange: (YearMonth) -> Unit
 @Composable
 fun DaysOfWeekHeader() {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        DayOfWeek.entries.forEach { dayOfWeek ->
+        DayOfWeek.values().forEach { dayOfWeek ->
             Text(text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
         }
     }
