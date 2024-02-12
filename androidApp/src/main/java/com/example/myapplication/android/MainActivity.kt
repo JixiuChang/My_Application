@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Space
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -16,17 +17,26 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode.Companion.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.Greeting
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+
+data class ProgressBarSection(
+    val value: Float,
+    val color: Color
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,30 +69,85 @@ fun IndexView() {
 
 @Composable
 fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit) {
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp)) {
-        Button(
-            onClick = onCalendarClick,
-            modifier = Modifier.padding(8.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)  // Add padding to bottom to space from the progress bar
         ) {
-            Icon(
-                imageVector = Icons.Filled.DateRange,
-                contentDescription = "Calendar"
-            )
+            Button(
+                onClick = onCalendarClick,
+                modifier = Modifier.padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.DateRange,
+                    contentDescription = "Calendar"
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onMasterManagerClick,
+                modifier = Modifier.padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = "Edit"
+                )
+            }
         }
-        Spacer(modifier = Modifier.weight(1f))
-        Button(
-            onClick = onMasterManagerClick,
-            modifier = Modifier.padding(8.dp)
+        // This Box will take up all available space, pushing the progress bar to the center
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f), // This will make the box take up all available space
+            contentAlignment = Alignment.Center // This will align the progress bar in the center of the box
         ) {
-            Icon(
-                imageVector = Icons.Filled.Edit,
-                contentDescription = "Edit"
+            CustomProgressBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .padding(horizontal = 32.dp),  // Side paddings for the progress bar
+                sections = listOf(
+                    ProgressBarSection(value = 0.2f, color = androidx.compose.ui.graphics.Color.Red),
+                    ProgressBarSection(value = 0.5f, color = androidx.compose.ui.graphics.Color.White),
+                    ProgressBarSection(value = 0.3f, color = androidx.compose.ui.graphics.Color.Green)
+                ),
+                spacing = 4.dp,  // Spacing between sections
+                cornerRadius = 7.5.dp  // Corner radius
             )
         }
     }
 }
+@Composable
+fun CustomProgressBar(
+    modifier: Modifier,
+    sections: List<ProgressBarSection>,
+    spacing: Dp,
+    cornerRadius: Dp
+) {
+    Canvas(modifier = modifier) {
+        val spaceWidth = spacing.toPx() * (sections.size - 1) // Total width of all spacings
+        val usableWidth = size.width - spaceWidth // Width that can be used by sections
+        var start = 0f
+
+        sections.forEachIndexed { index, section ->
+            val sectionWidth = usableWidth * section.value
+            drawRoundRect(
+                color = section.color,
+                topLeft = Offset(start, 0f),
+                size = androidx.compose.ui.geometry.Size(sectionWidth, size.height),
+                cornerRadius = CornerRadius(cornerRadius.toPx())
+            )
+            // Update the start position for the next section, including spacing
+            start += sectionWidth + if (index < sections.size - 1) spacing.toPx() else 0f
+        }
+    }
+}
+
 @Composable
 fun CalendarView(onClickBack: () -> Unit) {
     var selectedMonth by remember { mutableStateOf(YearMonth.now()) }
@@ -171,12 +236,15 @@ fun CalendarDaysGrid(days: List<LocalDate?>) {
 
 @Composable
 fun MasterManagerView(onClickBack: () -> Unit) {
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the end of the row
         Button(
             onClick = { onClickBack() },
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier.padding(top = 8.dp, end = 8.dp) // This is the padding on the right side of the button
         ) {
             Icon(
                 imageVector = Icons.Filled.Home,
