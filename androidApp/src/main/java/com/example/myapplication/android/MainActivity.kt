@@ -54,21 +54,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 @Composable
 fun IndexView() {
     var currentPageState by remember { mutableStateOf("Main") }
     when (currentPageState) {
         "Calendar" -> CalendarView { currentPageState = "Main" }
         "MasterManager" -> MasterManagerView { currentPageState = "Main" }
+        "Preview" -> PreviewView { currentPageState = "Main" }
         "Main" -> MainView(
             onCalendarClick = { currentPageState = "Calendar" },
-            onMasterManagerClick = { currentPageState = "MasterManager" }
+            onMasterManagerClick = { currentPageState = "MasterManager" },
+            onPreviewClick = { currentPageState = "Preview" }
         )
     }
 }
-
 @Composable
-fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit) {
+fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPreviewClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -120,8 +122,43 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit) {
                 cornerRadius = 7.5.dp  // Corner radius
             )
         }
+        IconButton(
+            onClick = { onPreviewClick() },
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(bottom = 16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = "Go to Preview",
+                modifier = Modifier.size(60.dp)
+            )
+        }
     }
 }
+
+@Composable
+fun PreviewView(onMainClick: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // IconButton at the top of the PreviewView
+        IconButton(
+            onClick = { onMainClick() },
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(top = 16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowUp,
+                contentDescription = "Go to Main",
+                modifier = Modifier.size(60.dp)
+            )
+        }
+        // ... other content for PreviewView ...
+    }
+}
+
 @Composable
 fun CustomProgressBar(
     modifier: Modifier,
