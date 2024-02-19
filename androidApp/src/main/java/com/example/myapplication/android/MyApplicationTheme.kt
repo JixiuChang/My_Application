@@ -16,14 +16,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val LightThemeColor = lightColorScheme(
-    primary = Color(0xFFBFA6FC),
+    primary = Color(0xFF7fb8a8),
     onPrimary = Color.Black,
     background = Color(0xFFFFF9F4),
     surface = Color(0xFFFFF9F4)
 )
 
 private val DarkThemeColor = darkColorScheme(
-    primary = Color(0xFF3f7558),
+    primary = Color(0xFFBFA6FC),
     onPrimary = Color.White,
     background = Color(0xFF505e70),
     surface = Color(0xFF505e70)
