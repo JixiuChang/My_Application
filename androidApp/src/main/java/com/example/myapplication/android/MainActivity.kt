@@ -1,32 +1,27 @@
 package com.example.myapplication.android
 
 import android.os.Bundle
-import android.widget.Space
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.BlendMode.Companion.Color
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.myapplication.Greeting
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -35,71 +30,95 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.Calendar
 import java.util.Locale
+import androidx.room.*
 
 data class ProgressBarSection(
     val value: Float,
     val color: Color
 )
 
-//global date
-val selectedDate = mutableStateOf(LocalDate.now())
+// DateConverter used by Database
+class LocalDateConverter {
+    @TypeConverter
+    fun fromLocalDate(date: LocalDate): String {
+        return date.toString()
+    }
 
+    @TypeConverter
+    fun toLocalDate(dateString: String): LocalDate {
+        return LocalDate.parse(dateString)
+    }
+}
+
+
+//Database
+@Entity(tableName = "finance")
+data class Finance(
+    @PrimaryKey val date: LocalDate,
+    var expectedIncome: Double,
+    var expectedExpenditure: Double,
+    var customNotes: String
+) {
+    val netIncome: Double
+        get() = expectedIncome - expectedExpenditure
+}
+
+//Main Activity
 class MainActivity : ComponentActivity() {
+    private val viewModel: MainViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel.selectedDate.observe(this) {
+            MainViewModelFactory((application as BusinessTrackerApplication).financeDao)
+        }
         setContent {
             MyApplicationTheme(darkTheme = false) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    IndexView()
+                    IndexView(viewModel)
                 }
             }
+            Text("For Eyjafjalla")
         }
     }
 }
 
-@Composable
-fun IndexView() {
-    var isTopIndex by remember { mutableStateOf(true) }
-    if (isTopIndex) {
-        IndexViewAbove(onSwitch = { isTopIndex = false })
-    } else {
-        IndexViewBelow(onSwitch = { isTopIndex = true })
-    }
-}
 
-
+//Index Views
 @Composable
-fun IndexViewAbove(onSwitch: () -> Unit) {
-    var currentPageState by remember { mutableStateOf("Main") }
-    when (currentPageState) {
-        "Calendar" -> CalendarView { currentPageState = "Main" }
-        "MasterManager" -> MasterManagerView { currentPageState = "Main" }
-        "Main" -> MainView(
-            onCalendarClick = { currentPageState = "Calendar" },
-            onMasterManagerClick = { currentPageState = "MasterManager" },
-            onPreviewClick = onSwitch
+fun IndexView(viewModel: MainViewModel) {
+    if (viewModel.currentPageState == "Main") {
+        MainView(
+            onCalendarClick = { viewModel.navigateTo("Calendar") },
+            onMasterManagerClick = { viewModel.navigateTo("MasterManager") },
+            onPreviewClick = { viewModel.navigateTo("Preview")}
+            // Other parameters
+        )
+    } else if (viewModel.currentPageState == "Calendar") {
+        CalendarView(
+            onClickBack = { viewModel.navigateTo("Main") },
+            viewModel = viewModel
+        )
+    } else if (viewModel.currentPageState == "MasterManager") {
+        MasterManagerView(
+            onClickBack = { viewModel.navigateTo("Main") },
+            viewModel = viewModel
+        )
+    } else if (viewModel.currentPageState == "Preview") {
+        PreviewView(
+            onCalendarClick = { viewModel.navigateTo("Calendar") },
+            onMasterManagerClick = { viewModel.navigateTo("MasterManager") },
+            onMainClick = { viewModel.navigateTo("Main") },
+            viewModel = viewModel
         )
     }
 }
 
-@Composable
-fun IndexViewBelow(onSwitch: () -> Unit) {
-    var currentPageState by remember { mutableStateOf("Preview") }
-    when (currentPageState) {
-        "Calendar" -> CalendarView { currentPageState = "Preview" }
-        "MasterManager" -> MasterManagerView { currentPageState = "Preview" }
-        "Preview" -> PreviewView(
-            onCalendarClick = { currentPageState = "Calendar" },
-            onMasterManagerClick = { currentPageState = "MasterManager" },
-            onMainClick = onSwitch
-        )
-    }
-}
+//Main View
 @Composable
 fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPreviewClick: () -> Unit) {
     Surface(
@@ -151,15 +170,15 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPr
                     sections = listOf(
                         ProgressBarSection(
                             value = 0.2f,
-                            color = androidx.compose.ui.graphics.Color.Red
+                            color = Color.Red
                         ),
                         ProgressBarSection(
                             value = 0.5f,
-                            color = androidx.compose.ui.graphics.Color.Blue
+                            color = Color.Blue
                         ),
                         ProgressBarSection(
                             value = 0.3f,
-                            color = androidx.compose.ui.graphics.Color.Green
+                            color = Color.Green
                         )
                     )
                 )
@@ -181,7 +200,9 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPr
 }
 
 @Composable
-fun PreviewView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onMainClick: () -> Unit) {
+fun PreviewView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onMainClick: () -> Unit, viewModel: MainViewModel) {
+    // If you're using State in ViewModel
+    val selectedDate = viewModel.selectedDateState
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -230,7 +251,7 @@ fun PreviewView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, o
                 }
             }
             Text(
-                text = selectedDate.value.format(DateTimeFormatter.ofPattern("yyyy MM dd")),
+                text = selectedDate.format(DateTimeFormatter.ofPattern("yyyy MM dd")),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }
@@ -245,7 +266,7 @@ fun PieChart(
 ) {
     Canvas(modifier = modifier) {
         // Calculate the total percentage to adjust sweep angles if they don't add up to 1 (100%)
-        val totalPercentage = sections.sumByDouble { it.value.toDouble() }.toFloat()
+        val totalPercentage = sections.sumOf { it.value.toDouble() }.toFloat()
         var startAngle = -90f // Start at the top (12 o'clock)
 
         // Draw the background circle
@@ -261,9 +282,9 @@ fun PieChart(
         sections.forEach { section ->
             val sweepAngle = (section.value / totalPercentage) * 360f // Calculate sweep angle
             val sectionColor = when (section.color) {
-                androidx.compose.ui.graphics.Color.Red -> Color(0xFFBB6666) // Less vibrant red
-                androidx.compose.ui.graphics.Color.Blue -> Color(0xFF6666BB)
-                androidx.compose.ui.graphics.Color.Green -> Color(0xFF66BB66) // Less vibrant green
+                Color.Red -> Color(0xFFBB6666) // Less vibrant red
+                Color.Blue -> Color(0xFF6666BB)
+                Color.Green -> Color(0xFF66BB66) // Less vibrant green
                 else -> section.color // Other colors remain unchanged
             }
 
@@ -282,30 +303,35 @@ fun PieChart(
 }
 
 @Composable
-fun CalendarView(onClickBack: () -> Unit) {
+fun CalendarView(onClickBack: () -> Unit, viewModel: MainViewModel) {
+    // If you're using State in ViewModel
+    val selectedDate = viewModel.selectedDateState
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        var selectedMonth by remember { mutableStateOf(YearMonth.from(selectedDate.value)) }
+        var selectedMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
         val daysInMonth = remember(selectedMonth) { selectedMonth.lengthOfMonth() }
         val firstOfMonth = remember(selectedMonth) { selectedMonth.atDay(1) }
-        val lastOfMonth = remember(selectedMonth) { selectedMonth.atEndOfMonth() }
-        val startDayOfWeek = firstOfMonth.dayOfWeek.value
         val days = remember(selectedMonth) {
-            val totalDays = List(daysInMonth + startDayOfWeek - 1) { dayIndex ->
-                if (dayIndex >= startDayOfWeek) {
-                    LocalDate.of(
-                        selectedMonth.year,
-                        selectedMonth.month,
-                        dayIndex - startDayOfWeek + 1
-                    )
-                } else null
+            val totalDays = mutableListOf<LocalDate?>()
+
+            // Determine the correct offset for starting from Sunday
+            val dayOffset = firstOfMonth.dayOfWeek.value % 7
+            for (i in 1..dayOffset) {
+                totalDays.add(null) // Add nulls for days before the first of the month
             }
-            // Fill in the leading and trailing nulls to complete the week
-            val additionalDaysAtStart = startDayOfWeek - 1
-            val additionalDaysAtEnd = 7 - (totalDays.size % 7)
-            List(additionalDaysAtStart) { null } + totalDays + List(additionalDaysAtEnd) { null }
+
+            for (dayIndex in 1..daysInMonth) {
+                totalDays.add(LocalDate.of(selectedMonth.year, selectedMonth.month, dayIndex))
+            }
+
+            // Add nulls for days after the last of the month to complete the grid
+            while (totalDays.size % 7 != 0) {
+                totalDays.add(null)
+            }
+
+            totalDays
         }
 
         Column(
@@ -336,7 +362,7 @@ fun CalendarView(onClickBack: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             DaysOfWeekHeader()
             Spacer(modifier = Modifier.height(8.dp))
-            CalendarDaysGrid(days, selectedDate)
+            CalendarDaysGrid(days, selectedDate, viewModel = viewModel)
         }
     }
 }
@@ -357,21 +383,35 @@ fun MonthYearHeader(selectedMonth: YearMonth, onMonthChange: (YearMonth) -> Unit
 
 @Composable
 fun DaysOfWeekHeader() {
+    // Start with Sunday
+    val daysOfWeek = listOf(
+        DayOfWeek.SUNDAY,
+        DayOfWeek.MONDAY,
+        DayOfWeek.TUESDAY,
+        DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY,
+        DayOfWeek.FRIDAY,
+        DayOfWeek.SATURDAY
+    )
+
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        DayOfWeek.values().forEach { dayOfWeek ->
+        daysOfWeek.forEach { dayOfWeek ->
             Text(text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
         }
     }
 }
 
+
 @Composable
 fun CalendarDaysGrid(
     days: List<LocalDate?>,
-    selectedDate: MutableState<LocalDate>
+    selectedDate: LocalDate,
+    viewModel: MainViewModel
 ) {
     val backgroundColor = Color(0xFFE6E0D8) // slightly darker than 0xFFFFF9F4
     val roundedCornerShape = RoundedCornerShape(4.dp) // for slightly rounded corners
     val minimumTextSize = 15.sp
+
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(7),
@@ -380,14 +420,14 @@ fun CalendarDaysGrid(
     ) {
         items(days) { day ->
             if (day != null) {
-                val textColor = if (selectedDate.value == day) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black // Ensuring contrast
+                val textColor = if (selectedDate == day) Color.White else Color.Black // Ensuring contrast
                 Button(
-                    onClick = { selectedDate.value = day },
+                    onClick = { viewModel.setNewDate(day)},
                     modifier = Modifier
                         .padding(4.dp)
                         .aspectRatio(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedDate.value == day) androidx.compose.ui.graphics.Color.Gray else backgroundColor
+                        containerColor = if (selectedDate == day) Color.Gray else backgroundColor
                     ),
                     contentPadding = PaddingValues(1.dp),
                     shape = roundedCornerShape // apply rounded corner shape
@@ -409,7 +449,13 @@ fun CalendarDaysGrid(
 
 
 @Composable
-fun MasterManagerView(onClickBack: () -> Unit) {
+fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
+    // If you're using State in ViewModel
+    val selectedDate = viewModel.selectedDateState
+    val expectedIncome = remember { mutableStateOf("") }
+    val expectedExpenditure = remember { mutableStateOf("") }
+    val customNotes = remember { mutableStateOf("") }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -428,18 +474,44 @@ fun MasterManagerView(onClickBack: () -> Unit) {
                 ) // This is the padding on the right side of the button
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Home,
+                    imageVector = Icons.Filled.ArrowBack,
                     contentDescription = "Main Menu"
                 )
             }
         }
-    }
-}
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Edit Day: ${selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))}")
+            OutlinedTextField(
+                value = expectedIncome.value,
+                onValueChange = { expectedIncome.value = it },
+                label = { Text("Expected Income") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = expectedExpenditure.value,
+                onValueChange = { expectedExpenditure.value = it },
+                label = { Text("Expected Expenditure") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = customNotes.value,
+                onValueChange = { customNotes.value = it },
+                label = { Text("Custom Notes") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-@Preview
-@Composable
-fun DefaultPreview() {
-    MyApplicationTheme {
-        IndexView()
+            Button(onClick = {
+                val income = expectedIncome.value.toDoubleOrNull() ?: 0.0
+                val expenditure = expectedExpenditure.value.toDoubleOrNull() ?: 0.0
+                val notes = customNotes.value
+
+                viewModel.updateFinance(selectedDate, income, expenditure, notes)
+            }) {
+                Text("Save Changes")
+            }
+        }
     }
 }
