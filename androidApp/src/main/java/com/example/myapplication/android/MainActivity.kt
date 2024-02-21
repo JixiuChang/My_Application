@@ -1,6 +1,7 @@
 package com.example.myapplication.android
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -38,6 +39,10 @@ data class ProgressBarSection(
     val color: Color
 )
 
+enum class TimePeriod {
+    Day, Week, Month
+}
+
 // DateConverter used by Database
 class LocalDateConverter {
     @TypeConverter
@@ -66,13 +71,12 @@ data class Finance(
 
 //Main Activity
 class MainActivity : ComponentActivity() {
-    private val viewModel: MainViewModel by viewModels()
+    private lateinit var viewModel: MainViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        viewModel.selectedDate.observe(this) {
-            MainViewModelFactory((application as BusinessTrackerApplication).financeDao)
-        }
+        Log.d(javaClass.simpleName, "onCreate $application")
+        viewModel = MainViewModel((application as BusinessTrackerApplication).financeDao)
         setContent {
             MyApplicationTheme(darkTheme = false) {
                 Surface(
@@ -82,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     IndexView(viewModel)
                 }
             }
-            Text("For Eyjafjalla")
+            //Text("For Eyjafjalla")
         }
     }
 }
@@ -95,7 +99,8 @@ fun IndexView(viewModel: MainViewModel) {
         MainView(
             onCalendarClick = { viewModel.navigateTo("Calendar") },
             onMasterManagerClick = { viewModel.navigateTo("MasterManager") },
-            onPreviewClick = { viewModel.navigateTo("Preview")}
+            onPreviewClick = { viewModel.navigateTo("Preview")},
+            viewModel = viewModel
             // Other parameters
         )
     } else if (viewModel.currentPageState == "Calendar") {
@@ -120,7 +125,9 @@ fun IndexView(viewModel: MainViewModel) {
 
 //Main View
 @Composable
-fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPreviewClick: () -> Unit) {
+fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPreviewClick: () -> Unit, viewModel: MainViewModel) {
+    val selectedTimePeriod = viewModel.selectedTimePeriod.collectAsState()
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -154,6 +161,40 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPr
                         contentDescription = "Edit"
                     )
                 }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = { viewModel.updateSelectedTimePeriod(TimePeriod.Day) },
+                    // Highlight the button if the time period is selected
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTimePeriod.value == TimePeriod.Day) Color.Gray else MaterialTheme.colorScheme.background
+                    )
+                ) {
+                    Text("Day")
+                }
+                Button(
+                    onClick = { viewModel.updateSelectedTimePeriod(TimePeriod.Week) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTimePeriod.value == TimePeriod.Week) Color.Gray else MaterialTheme.colorScheme.background
+                    )
+                ) {
+                    Text("Week")
+                }
+                Button(
+                    onClick = { viewModel.updateSelectedTimePeriod(TimePeriod.Month) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTimePeriod.value == TimePeriod.Month) Color.Gray else MaterialTheme.colorScheme.background
+                    )
+                ) {
+                    Text("Month")
+                }
+
             }
             // This Box will take up all available space, pushing the progress bar to the center
             Box(
@@ -460,57 +501,78 @@ fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the end of the row
-            Button(
-                onClick = { onClickBack() },
-                modifier = Modifier.padding(
-                    top = 8.dp,
-                    end = 8.dp
-                ) // This is the padding on the right side of the button
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowBack,
-                    contentDescription = "Main Menu"
-                )
+                Spacer(modifier = Modifier.weight(1f)) // This pushes the button to the end of the row
+                Button(
+                    onClick = { onClickBack() },
+                    modifier = Modifier.padding(
+                        top = 8.dp,
+                        end = 8.dp
+                    ) // This is the padding on the right side of the button
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Main Menu"
+                    )
+                }
             }
-        }
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Edit Day: ${selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))}")
-            OutlinedTextField(
-                value = expectedIncome.value,
-                onValueChange = { expectedIncome.value = it },
-                label = { Text("Expected Income") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = expectedExpenditure.value,
-                onValueChange = { expectedExpenditure.value = it },
-                label = { Text("Expected Expenditure") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = customNotes.value,
-                onValueChange = { customNotes.value = it },
-                label = { Text("Custom Notes") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
-            )
             Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
 
-            Button(onClick = {
-                val income = expectedIncome.value.toDoubleOrNull() ?: 0.0
-                val expenditure = expectedExpenditure.value.toDoubleOrNull() ?: 0.0
-                val notes = customNotes.value
+                    Text("Edit Day: ${selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))}",
+                        modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                viewModel.updateFinance(selectedDate, income, expenditure, notes)
-            }) {
-                Text("Save Changes")
+                    OutlinedTextField(
+                        value = expectedIncome.value,
+                        onValueChange = { expectedIncome.value = it },
+                        label = { Text("Expected Income") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(fraction = 1f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = expectedExpenditure.value,
+                        onValueChange = { expectedExpenditure.value = it },
+                        label = { Text("Expected Expenditure") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(fraction = 1f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = customNotes.value,
+                        onValueChange = { customNotes.value = it },
+                        label = { Text("Notes") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        modifier = Modifier.fillMaxWidth(fraction = 1f)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(onClick = {
+                        val income = expectedIncome.value.toDoubleOrNull() ?: 0.0
+                        val expenditure = expectedExpenditure.value.toDoubleOrNull() ?: 0.0
+                        val notes = customNotes.value
+
+                        viewModel.updateFinance(selectedDate, income, expenditure, notes)
+                        onClickBack()
+                    },
+                        modifier = Modifier.fillMaxWidth(fraction = 1f).padding(40.dp)
+                    ) {
+                        Text("Save Changes")
+                    }
+                }
             }
         }
     }
