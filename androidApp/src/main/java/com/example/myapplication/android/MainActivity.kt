@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -33,6 +34,10 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import androidx.room.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ProgressBarSection(
     val value: Float,
@@ -62,6 +67,7 @@ class LocalDateConverter {
 data class Finance(
     @PrimaryKey val date: LocalDate,
     var expectedIncome: Double,
+    var heldFund: Double,
     var expectedExpenditure: Double,
     var customNotes: String
 ) {
@@ -127,6 +133,14 @@ fun IndexView(viewModel: MainViewModel) {
 @Composable
 fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPreviewClick: () -> Unit, viewModel: MainViewModel) {
     val selectedTimePeriod = viewModel.selectedTimePeriod.collectAsState()
+
+    val financialData by viewModel.financialData.collectAsState()
+
+    val netExpectedIncome = financialData.sumOf { it.expectedIncome }
+    val currentlyHeldFunding = financialData.firstOrNull()?.heldFund ?: 0.0 // Placeholder, adjust as per actual implementation
+    val netExpectedExpenditure = financialData.sumOf { it.expectedExpenditure }
+    val expectedHeldFundAfter = netExpectedIncome - netExpectedExpenditure + currentlyHeldFunding
+
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -224,6 +238,17 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPr
                     )
                 )
             }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                // Display lines underneath the Pie Chart
+                DisplayLine(label = "Net Expected Income", value = netExpectedIncome, color = Color(0xFF66BB66))
+                DisplayLine(label = "Currently Held Funding", value = currentlyHeldFunding, color = Color.Transparent) // No square as per your request
+                DisplayLine(label = "Net Expected Expenditure", value = netExpectedExpenditure, color = Color(0xFFBB6666))
+                DisplayLine(label = "Expected Held Fund After", value = expectedHeldFundAfter, color = Color(0xFF6666BB))
+            }
             IconButton(
                 onClick = { onPreviewClick() },
                 modifier = Modifier
@@ -235,6 +260,28 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, onPr
                     contentDescription = "Go to Preview",
                     modifier = Modifier.size(60.dp)
                 )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun DisplayLine(label: String, value: Double, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(16.dp).background(color).then(Modifier.padding(end = 8.dp)), contentAlignment = Alignment.Center) {
+            // Conditionally display colored square, except when color is Transparent
+            if (color != Color.Transparent) Spacer(Modifier.size(16.dp))
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(text = "$label: ${String.format("%.2f", value)}")
             }
         }
     }
@@ -468,7 +515,12 @@ fun CalendarDaysGrid(
                         .padding(4.dp)
                         .aspectRatio(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedDate == day) Color.Gray else backgroundColor
+                        containerColor = when {
+                            selectedDate == day -> Color.Gray
+                            viewModel.hasNetDeficit(day) -> Color(0xFFBB6666) // Net deficit
+                            viewModel.hasNetSurplus(day) -> Color(0xFF66BB66) // Net surplus
+                            else -> backgroundColor
+                        }
                     ),
                     contentPadding = PaddingValues(1.dp),
                     shape = roundedCornerShape // apply rounded corner shape
@@ -491,6 +543,8 @@ fun CalendarDaysGrid(
 
 @Composable
 fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
+    //Debug
+
     // If you're using State in ViewModel
     val selectedDate = viewModel.selectedDateState
     val expectedIncome = remember { mutableStateOf("") }
@@ -565,7 +619,12 @@ fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
                         val expenditure = expectedExpenditure.value.toDoubleOrNull() ?: 0.0
                         val notes = customNotes.value
 
+                        // Log the selectedDate value
+                        Log.d("Debug", "Selected date for update: $selectedDate")
+
                         viewModel.updateFinance(selectedDate, income, expenditure, notes)
+                        val knownDate = LocalDate.of(2023, 4, 21) // Adjust this to a date you know exists in your database
+                        viewModel.updateFinance(knownDate, 60.0, 30.0, " ")
                         onClickBack()
                     },
                         modifier = Modifier.fillMaxWidth(fraction = 1f).padding(40.dp)
@@ -577,3 +636,4 @@ fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
         }
     }
 }
+
