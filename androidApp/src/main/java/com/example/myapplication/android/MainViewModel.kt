@@ -43,6 +43,25 @@ class MainViewModel(private val financeDao: FinanceDao) : ViewModel() {
     var currentPageState by mutableStateOf("Main")
         private set
 
+    private val _netExpectedIncome = MutableStateFlow(0.0)
+    val netExpectedIncome: StateFlow<Double> = _netExpectedIncome.asStateFlow()
+
+    private val _currentlyHeldFunding = MutableStateFlow(0.0)
+    val currentlyHeldFunding: StateFlow<Double> = _currentlyHeldFunding.asStateFlow()
+
+    private val _netExpectedExpenditure = MutableStateFlow(0.0)
+    val netExpectedExpenditure: StateFlow<Double> = _netExpectedExpenditure.asStateFlow()
+
+    private val _expectedHeldFundAfter = MutableStateFlow(0.0)
+    val expectedHeldFundAfter: StateFlow<Double> = _expectedHeldFundAfter.asStateFlow()
+
+    private val _hasNetDeficit = MutableStateFlow<Boolean?>(null)
+    val hasNetDeficit: StateFlow<Boolean?> = _hasNetDeficit
+
+    private val _hasNetSurplus = MutableStateFlow<Boolean?>(null)
+    val hasNetSurplus: StateFlow<Boolean?> = _hasNetSurplus
+
+
     fun navigateTo(page: String) {
         currentPageState = page
     }
@@ -52,17 +71,14 @@ class MainViewModel(private val financeDao: FinanceDao) : ViewModel() {
     }
 
     fun ensureDataForDate(date: LocalDate) = viewModelScope.launch {
-        val exists = financeDao.exists(date) // Assume exists is a method that checks if the date exists
-        if (!exists) {
-            populateDatesStartingFrom(date)
-        }
-    }
-
-    private suspend fun populateDatesStartingFrom(date: LocalDate) {
-        for (i in 0..31) { // Populate for the requested date + the next 6 days
+        for (i in 0..31) { // Populate for the requested date + the next 31 days
             val newDate = date.plusDays(i.toLong())
-            val newFinanceEntry = Finance(newDate, 0.0, 0.0, 0.0, "")
-            financeDao.insert(newFinanceEntry)
+            val exists = financeDao.exists(newDate)
+            if (!exists) {
+                val newFinanceEntry = Finance(newDate, 0.0, 0.0, 0.0, "")
+                val inserted = financeDao.insert(newFinanceEntry)
+                Log.d("Inserted", "$inserted")
+            }
         }
     }
 
@@ -70,19 +86,12 @@ class MainViewModel(private val financeDao: FinanceDao) : ViewModel() {
     fun updateFinance(date: LocalDate, income: Double, expenditure: Double, notes: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                ensureDataForDate(date)
                 Log.d("ViewModel", "Updating finance for $date")
-                val updatedRows = financeDao.updateDayDetails(date, income, expenditure, notes)
+                val updatedRow = financeDao.updateDayDetails(date, income, expenditure, notes)
+                fetchDataBasedOnTimePeriod(selectedTimePeriod.value)
+                Log.d("ViewModel", financeDao.getFinanceDataBetweenDates(date, date).toString())
                 Log.d("ViewModel", "Finance updated successfully")
-
-                if (updatedRows > 0) {
-                    // If rows were updated, fetch and log all entries to verify.
-                    val allFinances = financeDao.getAll() // Assuming getAll returns a list of all Finance entries
-                    allFinances.forEach { finance ->
-                        Log.d("DatabaseContent", finance.toString())
-                    }
-                } else {
-                    Log.d("ViewModel", "No rows were updated, check your query or the state of the database.")
-                }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Exception in ViewModel", e)
             }
@@ -105,18 +114,45 @@ class MainViewModel(private val financeDao: FinanceDao) : ViewModel() {
             val data = financeDao.getFinanceDataBetweenDates(startDate, endDate)
             withContext(Dispatchers.Main) {
                 _financialData.value = data
+
+                // Aggregate the sums of each financial metric
+                _netExpectedIncome.value = data.sumOf { it.expectedIncome }
+                _netExpectedExpenditure.value = data.sumOf { it.expectedExpenditure }
+                _currentlyHeldFunding.value = data.first().heldFund
+                _expectedHeldFundAfter.value = _netExpectedIncome.value - _netExpectedExpenditure.value + _currentlyHeldFunding.value
             }
         }
     }
 
-    fun hasNetDeficit(date: LocalDate): Boolean {
-        val finance = financialData.value.find { it.date == date }
-        return finance?.netIncome?.let { it < 0 } ?: false
+    suspend fun hasNetDeficit(date: LocalDate): Boolean = withContext(Dispatchers.IO) {
+        val data = financeDao.getFinanceDataBetweenDates(date, date)
+        if (data.isNotEmpty()) {
+            val firstEntry = data.first()
+            firstEntry.netIncome < 0
+        } else {
+            false
+        }
     }
 
-    fun hasNetSurplus(date: LocalDate): Boolean {
-        val finance = financialData.value.find { it.date == date }
-        return finance?.netIncome?.let { it > 0 } ?: false
+    suspend fun hasNetSurplus(date: LocalDate): Boolean = withContext(Dispatchers.IO) {
+        val data = financeDao.getFinanceDataBetweenDates(date, date)
+        if (data.isNotEmpty()) {
+            val firstEntry = data.first()
+            firstEntry.netIncome > 0
+        } else {
+            false
+        }
     }
 
+    fun checkNetDeficit(date: LocalDate) {
+        viewModelScope.launch {
+            _hasNetDeficit.value = hasNetDeficit(date) // Assume hasNetDeficit is your suspend function
+        }
+    }
+
+    fun checkNetSurplus(date: LocalDate) {
+        viewModelScope.launch {
+            _hasNetSurplus.value = hasNetSurplus(date) // Assume hasNetSurplus is your suspend function
+        }
+    }
 }
