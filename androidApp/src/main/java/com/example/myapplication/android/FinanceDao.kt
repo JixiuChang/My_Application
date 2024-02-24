@@ -27,6 +27,9 @@ interface FinanceDao {
     @Query("UPDATE finance SET expectedIncome = :income, heldFund = 0.0, expectedExpenditure = :expenditure, customNotes = :notes WHERE date = :date")
     fun updateDayDetails(date: LocalDate, income: Double, expenditure: Double, notes: String): Int
 
+    @Query("UPDATE finance SET heldFund = :heldFund WHERE date = :date")
+    fun updateHeldFund(date: LocalDate, heldFund: Double): Int
+
     @Query("SELECT * FROM finance WHERE date BETWEEN :startDate AND :endDate")
     fun getFinanceDataBetweenDates(startDate: LocalDate, endDate: LocalDate): List<Finance>
 }

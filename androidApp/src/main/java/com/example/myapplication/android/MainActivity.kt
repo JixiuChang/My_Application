@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -34,11 +33,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import androidx.room.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
 data class ProgressBarSection(
     val value: Float,
     val color: Color
@@ -126,6 +120,10 @@ fun IndexView(viewModel: MainViewModel) {
 fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, viewModel: MainViewModel) {
     val selectedTimePeriod = viewModel.selectedTimePeriod.collectAsState()
 
+    LaunchedEffect(key1 = viewModel.databaseVersion) {
+        Log.d(javaClass.simpleName,"database version ${viewModel.databaseVersion}")
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -160,12 +158,17 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, view
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "${viewModel.selectedDateState.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))}",
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(16.dp)
+                    .align(Alignment.CenterHorizontally),
                 horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = { viewModel.updateSelectedTimePeriod(TimePeriod.Day) },
@@ -201,27 +204,51 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, view
                     .weight(1f), // This will make the box take up all available space
                 contentAlignment = Alignment.Center // This will align the progress bar in the center of the box
             ) {
+                val netIncome = viewModel.netExpectedIncome.collectAsState().value.toFloat() - viewModel.netExpectedExpenditure.collectAsState().value.toFloat()
+                val totalFloat = viewModel.expectedHeldFundAfter.collectAsState().value.toFloat()
+                val netExpectedIncomePct: Float
+                val netExpectedExpenditurePct: Float
+                val leftoverSectionPct: Float
+
+                if (netIncome > 0) {
+                    val netExpectedIncome = viewModel.netExpectedIncome.collectAsState().value.toFloat() // Convert to Float
+                    netExpectedIncomePct = netExpectedIncome / totalFloat
+                    val leftoverSection = totalFloat - netExpectedIncome// Convert to Float
+                    leftoverSectionPct = if (totalFloat > 0f) leftoverSection / totalFloat else 0f
+                    netExpectedExpenditurePct = 0f
+                } else {
+                    val netExpectedExpenditure = viewModel.netExpectedExpenditure.collectAsState().value.toFloat() // Convert to Float
+                    netExpectedExpenditurePct = netExpectedExpenditure / totalFloat
+                    val leftoverSection = totalFloat - netExpectedExpenditure// Convert to Float
+                    leftoverSectionPct = if (totalFloat > 0f) leftoverSection / totalFloat else 0f
+                    netExpectedIncomePct = 0f
+                }
+
+
+                // Calculate percentages explicitly as Float
+
+
                 PieChart(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        .padding(horizontal = 32.dp),  // Side paddings for the progress bar
-                    sections = listOf(
-                        ProgressBarSection(
-                            value = 0.2f,
-                            color = Color.Red
-                        ),
-                        ProgressBarSection(
-                            value = 0.5f,
-                            color = Color.Blue
-                        ),
-                        ProgressBarSection(
-                            value = 0.3f,
-                            color = Color.Green
-                        )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .padding(horizontal = 32.dp),  // Side paddings for the progress bar
+                sections = listOf(
+                    ProgressBarSection(
+                        value = netExpectedExpenditurePct,
+                        color = Color.Red
+                    ),
+                    ProgressBarSection(
+                        value = leftoverSectionPct,
+                        color = Color.Blue
+                    ),
+                    ProgressBarSection(
+                        value = netExpectedIncomePct,
+                        color = Color.Green
                     )
                 )
-            }
+            )
+        }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -231,7 +258,7 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, view
                 DisplayLine(label = "Net Expected Income", value = viewModel.netExpectedIncome.collectAsState().value, color = Color(0xFF66BB66))
                 DisplayLine(label = "Currently Held Funding", value = viewModel.currentlyHeldFunding.collectAsState().value, color = Color.Transparent) // No square as per your request
                 DisplayLine(label = "Net Expected Expenditure", value = viewModel.netExpectedExpenditure.collectAsState().value, color = Color(0xFFBB6666))
-                DisplayLine(label = "Expected Held Fund After", value = viewModel.expectedHeldFundAfter.collectAsState().value, color = Color(0xFF6666BB))
+                DisplayLine(label = "Expected Held Fund After", value = viewModel.expectedHeldFundAfter.collectAsState().value, color = Color.LightGray)
             }
         }
     }
@@ -241,7 +268,10 @@ fun MainView(onCalendarClick: () -> Unit, onMasterManagerClick: () -> Unit, view
 @Composable
 fun DisplayLine(label: String, value: Double, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(16.dp).background(color).then(Modifier.padding(end = 8.dp)), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier
+            .size(16.dp)
+            .background(color)
+            .then(Modifier.padding(end = 8.dp)), contentAlignment = Alignment.Center) {
             // Conditionally display colored square, except when color is Transparent
             if (color != Color.Transparent) Spacer(Modifier.size(16.dp))
         }
@@ -285,7 +315,7 @@ fun PieChart(
             val sweepAngle = (section.value / totalPercentage) * 360f // Calculate sweep angle
             val sectionColor = when (section.color) {
                 Color.Red -> Color(0xFFBB6666) // Less vibrant red
-                Color.Blue -> Color(0xFF6666BB)
+                Color.Blue -> Color(0xFF8888CC)
                 Color.Green -> Color(0xFF66BB66) // Less vibrant green
                 else -> section.color // Other colors remain unchanged
             }
@@ -306,6 +336,7 @@ fun PieChart(
 
 @Composable
 fun CalendarView(onClickBack: () -> Unit, viewModel: MainViewModel) {
+
     // If you're using State in ViewModel
     val selectedDate = viewModel.selectedDateState
     Surface(
@@ -414,8 +445,9 @@ fun CalendarDaysGrid(
     val roundedCornerShape = RoundedCornerShape(4.dp) // for slightly rounded corners
     val minimumTextSize = 15.sp
 
-    val hasNetDeficit = viewModel.hasNetDeficit.collectAsState().value
-    val hasNetSurplus = viewModel.hasNetSurplus.collectAsState().value
+    LaunchedEffect(key1 = viewModel.databaseVersion) {
+        Log.d(javaClass.simpleName,"database version ${viewModel.databaseVersion}")
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(7),
@@ -433,8 +465,6 @@ fun CalendarDaysGrid(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = when {
                             selectedDate == day -> Color.Gray
-                            hasNetDeficit == true -> Color(0xFFBB6666) // Net deficit
-                            hasNetSurplus == true -> Color(0xFF66BB66) // Net surplus
                             else -> backgroundColor
                         }
                     ),
@@ -541,7 +571,9 @@ fun MasterManagerView(onClickBack: () -> Unit, viewModel: MainViewModel) {
                         viewModel.updateFinance(selectedDate, income, expenditure, notes)
                         onClickBack()
                     },
-                        modifier = Modifier.fillMaxWidth(fraction = 1f).padding(40.dp)
+                        modifier = Modifier
+                            .fillMaxWidth(fraction = 1f)
+                            .padding(40.dp)
                     ) {
                         Text("Save Changes")
                     }
